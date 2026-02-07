@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Parent View</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; }
+      header { padding: 12px 16px; display: grid; gap: 8px; border-bottom: 1px solid #ddd; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      input, button, select { padding: 8px 10px; }
+      #map { height: calc(100vh - 160px); }
+      #events { height: 120px; overflow: auto; border-top: 1px solid #ddd; padding: 10px 16px; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Parent</strong>
+      <div class="grid">
+        <input id="email" placeholder="parent email" />
+        <input id="password" placeholder="password" type="password" />
+      </div>
+      <div class="grid">
+        <button id="login">Login</button>
+        <select id="student"></select>
+      </div>
+    </header>
+    <div id="map"></div>
+    <div id="events"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module">
+      import { api, el } from './app.js';
+
+      let token = null;
+      let socket = null;
+      let busId = null;
+
+      const map = L.map('map').setView([24.7136, 46.6753], 11);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      const busMarker = L.marker([24.7136, 46.6753]).addTo(map).bindPopup('Bus');
+
+      function addEvent(text) {
+        el('events').textContent = `${new Date().toLocaleTimeString()} ${text}\n` + el('events').textContent;
+      }
+
+      async function loadStudents() {
+        const res = await api('/parent/students', { token });
+        el('student').innerHTML = '';
+        for (const s of res.students) {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = `${s.name} (bus ${s.bus.code})`;
+          opt.dataset.busId = s.busId;
+          el('student').appendChild(opt);
+        }
+        if (res.students[0]) {
+          busId = res.students[0].busId;
+        }
+      }
+
+      function connectSocket() {
+        socket = io({ auth: { token } });
+        socket.on('connect', () => addEvent('Socket connected'));
+        socket.on('disconnect', () => addEvent('Socket disconnected'));
+
+        socket.on('busLocation', (msg) => {
+          if (msg.busId !== busId) return;
+          busMarker.setLatLng([msg.lat, msg.lng]);
+        });
+
+        socket.on('notification', (n) => {
+          addEvent(`${n.type}: ${n.title} - ${n.body}`);
+        });
+
+        if (busId) socket.emit('subscribeBus', busId);
+      }
+
+      el('login').onclick = async () => {
+        try {
+          const res = await api('/auth/login', { method: 'POST', body: { email: el('email').value, password: el('password').value } });
+          token = res.token;
+          await loadStudents();
+          connectSocket();
+          addEvent('Logged in');
+        } catch (e) {
+          addEvent(e.message);
+        }
+      };
+
+      el('student').onchange = () => {
+        const opt = el('student').selectedOptions[0];
+        if (!opt) return;
+        const nextBusId = opt.dataset.busId;
+        if (socket && busId && nextBusId && busId !== nextBusId) {
+          socket.emit('unsubscribeBus', busId);
+          busId = nextBusId;
+          socket.emit('subscribeBus', busId);
+        }
+      };
+    </script>
+  </body>
+</html>
