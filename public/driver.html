@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driver Simulator</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+      input, button, select { padding: 8px 10px; margin: 4px 0; }
+      .row { display: grid; gap: 8px; max-width: 460px; }
+      pre { background: #111; color: #eee; padding: 12px; border-radius: 8px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Driver Simulator</h1>
+    <div class="row">
+      <input id="email" placeholder="driver email" />
+      <input id="password" placeholder="password" type="password" />
+      <button id="login">Login</button>
+
+      <input id="lat" placeholder="lat" value="24.7136" />
+      <input id="lng" placeholder="lng" value="46.6753" />
+      <button id="sendLoc">Send Location</button>
+
+      <input id="studentId" placeholder="studentId" />
+      <select id="attType">
+        <option value="BOARDED">BOARDED</option>
+        <option value="DROPPED_OFF">DROPPED_OFF</option>
+      </select>
+      <button id="sendAtt">Send Attendance</button>
+      <pre id="log"></pre>
+    </div>
+
+    <script type="module">
+      import { api, el } from './app.js';
+      let token = null;
+
+      const log = (x) => {
+        el('log').textContent = `${new Date().toISOString()} ${x}\n` + el('log').textContent;
+      };
+
+      el('login').onclick = async () => {
+        try {
+          const res = await api('/auth/login', { method: 'POST', body: { email: el('email').value, password: el('password').value } });
+          token = res.token;
+          log('Logged in');
+        } catch (e) {
+          log(e.message);
+        }
+      };
+
+      el('sendLoc').onclick = async () => {
+        try {
+          const lat = Number(el('lat').value);
+          const lng = Number(el('lng').value);
+          await api('/driver/location', { token, method: 'POST', body: { lat, lng } });
+          log('Location sent');
+        } catch (e) {
+          log(e.message);
+        }
+      };
+
+      el('sendAtt').onclick = async () => {
+        try {
+          const studentId = el('studentId').value;
+          const type = el('attType').value;
+          const res = await api('/driver/attendance', { token, method: 'POST', body: { studentId, type } });
+          log(`Attendance: ${res.event.id}`);
+        } catch (e) {
+          log(e.message);
+        }
+      };
+    </script>
+  </body>
+</html>
