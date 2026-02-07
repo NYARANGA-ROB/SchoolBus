@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  DRIVER
+  PARENT
+}
+
+enum AttendanceType {
+  BOARDED
+  DROPPED_OFF
+}
+
+enum NotificationType {
+  BUS_NEAR_PICKUP
+  BUS_ARRIVED
+  STUDENT_BOARDED
+  DRIVER_ALERT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  driverProfile DriverProfile?
+  parentProfile ParentProfile?
+
+  notifications NotificationEvent[]
+}
+
+model DriverProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  busId     String?  @unique
+  bus       Bus?     @relation(fields: [busId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ParentProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students  Student[]
+}
+
+model Student {
+  id            String   @id @default(cuid())
+  name          String
+  parentId      String
+  parent        ParentProfile @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  busId         String
+  bus           Bus      @relation(fields: [busId], references: [id], onDelete: Restrict)
+  pickupPointId String
+  pickupPoint   PickupPoint @relation(fields: [pickupPointId], references: [id], onDelete: Restrict)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  attendance    AttendanceEvent[]
+}
+
+model Bus {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  routeId   String?
+  route     Route?   @relation(fields: [routeId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  driver     DriverProfile?
+  students   Student[]
+  locations  BusLocation[]
+}
+
+model Route {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  buses     Bus[]
+  points    PickupPoint[]
+}
+
+model PickupPoint {
+  id        String   @id @default(cuid())
+  routeId   String
+  route     Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  name      String
+  lat       Float
+  lng       Float
+  order     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students  Student[]
+}
+
+model BusLocation {
+  id        String   @id @default(cuid())
+  busId     String
+  bus       Bus      @relation(fields: [busId], references: [id], onDelete: Cascade)
+  lat       Float
+  lng       Float
+  speedKph  Float?
+  heading   Float?
+  accuracyM Float?
+  createdAt DateTime @default(now())
+
+  @@index([busId, createdAt])
+}
+
+model AttendanceEvent {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  busId     String
+  bus       Bus      @relation(fields: [busId], references: [id], onDelete: Cascade)
+  type      AttendanceType
+  createdAt DateTime @default(now())
+
+  @@index([studentId, createdAt])
+}
+
+model NotificationEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
